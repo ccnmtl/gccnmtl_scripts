@@ -10,7 +10,7 @@ For reference, here is the GCal API refernece: https://developers.google.com/goo
 
 ## Usage:
 
-./gccnmtl_calendar_sharing.py -c|--config <path to .ini file of urls and dest names> [-a|--add] [-r|--remove] [-l list] [-h|--help]
+./gccnmtl_calendar_sharing.py -c|--config \<path to .ini file of urls and dest names\> [-a|--add] [-r|--remove] [-l list] [-h|--help]
 
 Sample config file: https://github.com/ccnmtl/gccnmtl_scripts/blob/master/sample_config.ini
 

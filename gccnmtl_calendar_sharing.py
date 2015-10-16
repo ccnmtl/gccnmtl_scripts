@@ -189,15 +189,13 @@ def main(argv=None):
         print (__doc__)
         return 2
         
-    #LEW_603 = 'gccnmtl.columbia.edu_2d31383235333138342d393935@resource.calendar.google.com'
-    #USER = 'jb2410'
-    #USER_EMAIL = "%s@columbia.edu" % USER
-
     # try opening the config file
     if not(os.access(config_filename, os.R_OK | os.F_OK)):
         print ("Could not open %s\n" % config_filename)
         sys.exit(2)
-    
+
+    # this config file should have a section for calendar ids, and another for valid gapp emails
+    # the elements are not name=value pairs, just names
     config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config.read(config_filename)
 
@@ -208,7 +206,9 @@ def main(argv=None):
         users = config.options(USER_ID_SECTION)
     except:
         print ("Config file is misconfiged. See the README.md for more help")
-        
+
+    # oauth dance w/ google. Credentials are stored locally after first auth. 
+    # this method will open a brower for auth
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('calendar', 'v3', http=http)

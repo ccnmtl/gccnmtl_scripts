@@ -2,7 +2,7 @@
 """
 A small script to manage gccnmtl calendars
 
-./gccnmtl_calendar_sharing.py [-a --add|-r --remove|-l list]][-c|--config <path to .ini file of urls and dest names>] [-h|--help]
+./gccnmtl_calendar_sharing.py -c|--config <path to .ini file of urls and dest names> [-a|--add] [-r|--remove] [-l list] [-h|--help]
 
 Jonah Bossewitch, CTL
 https://github.com/ccnmtl/gccnmtl_scripts/README.md

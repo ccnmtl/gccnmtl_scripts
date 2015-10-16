@@ -140,12 +140,7 @@ def remove_users(service, calendars, users):
 
 def main(argv=None):
     """
-    Decides what to do based on command line arguements, and dispatches to appropriate function
-
-    required arguments
-    - gccntml calendar id - the calendar you want to operate on
-    - verb: add|remove
-    - user: the user you want to share/remove from the calendar 
+    parse command line args, read config file, authenticate to google, and dispatch to action function
     """
 
     if argv == None:
@@ -212,7 +207,8 @@ def main(argv=None):
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('calendar', 'v3', http=http)
- 
+
+    # finally, do something - list, add or remove
     rc = func(service, calendars, users)
     return rc
 

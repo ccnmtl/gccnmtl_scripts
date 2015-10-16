@@ -1,4 +1,10 @@
 #!ve/bin/python
+"""
+From https://developers.google.com/google-apps/calendar/quickstart/python
+
+Make sure to follow the instructions, and download client_secret.json
+"""
+
 from __future__ import print_function
 import httplib2
 import os

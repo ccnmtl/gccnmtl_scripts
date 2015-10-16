@@ -6,6 +6,8 @@ gccnmtl_calendar_sharing.py is intended for bulk sharing operations on GApps cal
 
 Our specific need right now is to share resource calendars form gccnmtl.columbia.edu (owned by admin@gccnmtl.columbia.edu) with every member of the CTL staff in lionmail.  We are doing this to avoid having to share event details publically. W/out explicit sharing of event details, the resource rooms will not auto-accept reservations. With explicit sharing, even free/busy can be private.
 
+For reference, here is the GCal API refernece: https://developers.google.com/google-apps/calendar/v3/reference/?hl=en
+
 ## Usage:
 
 ./gccnmtl_calendar_sharing.py -c|--config <path to .ini file of urls and dest names> [-a|--add] [-r|--remove] [-l list] [-h|--help]

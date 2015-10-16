@@ -61,82 +61,113 @@ def get_credentials():
     return credentials
 
 
-def list_calendar(service, calendar_id):
-    """List the current sharing rules on calendar_id"""
-    
-    try:
-        acl = service.acl().list(calendarId=calendar_id).execute()
-    except HttpError, err:
-      if err.resp.status == 404:
-          print ("Calendar %s was not found." % calendar_id )
-          return
-      else:
-          raise
+class GCalSharing:
 
-    for rule in acl['items']:
-        print("%s: %s" % (rule['id'], rule['role']))
-
-def list_all(service, calendars, users):
-    """call list_calendar for each calendar in calendars"""
-    
-    for c in calendars:
-        list_calendar(service, c)
+    def __init__(self, config_filename):
+        self.service = None
+        self.calendars = []
+        self.users = []
+        service = None
         
-def add_user(service, calendar_id, user_email):
-    """add this user to the calendar as a reader"""
+        # try opening the config file
+        if not(os.access(config_filename, os.R_OK | os.F_OK)):
+            print ("Could not open %s\n" % config_filename)
+            sys.exit(2)
 
-    # construct a valid rule object
-    # todo: will domains work here? 
-    rule = {
-        'scope': {
-            'type': 'user',
-            'value': user_email,
-            },
-        'role': 'reader'
-    }
+        # this config file should have a section for calendar ids, and another for valid gapp emails
+        # the elements are not name=value pairs, just names
+        config = ConfigParser.SafeConfigParser(allow_no_value=True)
+        config.read(config_filename)
 
-    try:
-        created_rule = service.acl().insert(calendarId=calendar_id, body=rule).execute()
-    except HttpError, err:
-        if err.resp.status == 404:
-          print ("The Calendar %s was not found." % calendar_id )
-          return
-        # this method does not fail if user is already on the calendar. 
-        else:
-          raise
+        try: 
+            self.calendars = config.options(CALENDAR_ID_SECTION)
+            self.users = config.options(USER_ID_SECTION)
+        except:
+            print ("Config file is misconfiged. See the README.md for more help")
 
-    print("%s was added to %s (rule: %s)" % (user_email, calendar_id, created_rule['id']))
+    def authenticate(self):
+        # oauth dance w/ google. Credentials are stored locally after first auth. 
+        # this method will open a brower for auth
+        credentials = get_credentials()
+        http = credentials.authorize(httplib2.Http())
+        self.service = discovery.build('calendar', 'v3', http=http)
 
-def add_users(service, calendars, users):
-    """call add_user for each users for each calendar in calendars"""
+    def list_calendar(self, calendar_id):
+        """List the current sharing rules on calendar_id"""
+        
+        try:
+            acl = self.service.acl().list(calendarId=calendar_id).execute()
+        except HttpError, err:
+          if err.resp.status == 404:
+              print ("Calendar %s was not found." % calendar_id )
+              return
+          else:
+              raise
+          
+        for rule in acl['items']:
+            print("%s: %s" % (rule['id'], rule['role']))
+            
+    def list_all(self):
+        """call list_calendar for each calendar in calendars"""
+        
+        for c in self.calendars:
+            self.list_calendar(c)
+        
+    def add_user(self, calendar_id, user_email):
+        """add this user to the calendar as a reader"""
+        
+        # construct a valid rule object
+        # todo: will domains work here? 
+        rule = {
+            'scope': {
+                'type': 'user',
+                'value': user_email,
+                },
+            'role': 'reader'
+        }
+
+        try:
+            created_rule = self.service.acl().insert(calendarId=calendar_id, body=rule).execute()
+        except HttpError, err:
+            if err.resp.status == 404:
+                print ("The Calendar %s was not found." % calendar_id )
+                return
+            # this method does not fail if user is already on the calendar. 
+            else:
+                raise
+
+        print("%s was added to %s (rule: %s)" % (user_email, calendar_id, created_rule['id']))
+          
+    def add_users(self):
+        """call add_user for each users for each calendar in calendars"""
+        
+        for c in self.calendars:
+            for u in self.users:
+                self.add_user(c, u)
+                
+    def remove_user(self, calendar_id, user_email):
+        """remove this user from calendar_id"""
     
-    for c in calendars:
-        for u in users:
-                 add_user(service, c, u)
-
-def remove_user(service, calendar_id, user_email):
-    """remove this user from calendar_id"""
+        rule_id = "user:%s" % user_email
+        try:
+            self.service.acl().delete(calendarId=calendar_id, ruleId=rule_id).execute()
+        except HttpError, err:
+            if err.resp.status == 404:
+                print ("The Calendar %s was not found." % calendar_id )
+                return
+            elif err.resp.status == 400:
+                print ("The user %s was not found on this calendar (%s)." % (user_email, calendar_id))
+                return
+            else:
+                raise
+        print("%s was removed from %s" % (user_email, calendar_id))
     
-    rule_id = "user:%s" % user_email
-    try:
-        service.acl().delete(calendarId=calendar_id, ruleId=rule_id).execute()
-    except HttpError, err:
-        if err.resp.status == 404:
-          print ("The Calendar %s was not found." % calendar_id )
-          return
-        elif err.resp.status == 400:
-          print ("The user %s was not found on this calendar (%s)." % (user_email, calendar_id))
-          return
-        else:
-          raise
-    print("%s was removed from %s" % (user_email, calendar_id))
-    
-def remove_users(service, calendars, users):
-    """call add_user for each users for each calendar in calendars"""
-    
-    for c in calendars:
-        for u in users:
-                 remove_user(service, c, u)
+    def remove_users(self):
+        """call add_user for each users for each calendar in calendars"""
+        
+        for c in self.calendars:
+            for u in self.users:
+                self.remove_user(c, u)
 
 def main(argv=None):
     """
@@ -161,15 +192,16 @@ def main(argv=None):
     
     #import pdb; pdb.set_trace()
 
-    func = None
+    action = None
     arg = None
+    config_filename = ""
     for o, a in opts:
         if o == "-l" or o == "--list":
-            func = list_all
+            action = GCalSharing.list_all
         elif o == "-a" or o == "--add":
-            func = add_users
+            action = GCalSharing.add_users
         elif o == "-r" or o == "--remove":
-            func = remove_users
+            action = GCalSharing.remove_users
         elif o == "-c" or o == "--config":
             config_filename = a
         elif o == "-h" or o == "--help":
@@ -180,37 +212,20 @@ def main(argv=None):
             return 2
 
     #make sure an action was specified
-    if not func or not config_filename:
+    if not action or not config_filename:
+        print ("You must specify a config filename AND a single action, --add, --remove or --list")
         print (__doc__)
         return 2
-        
-    # try opening the config file
-    if not(os.access(config_filename, os.R_OK | os.F_OK)):
-        print ("Could not open %s\n" % config_filename)
-        sys.exit(2)
 
-    # this config file should have a section for calendar ids, and another for valid gapp emails
-    # the elements are not name=value pairs, just names
-    config = ConfigParser.SafeConfigParser(allow_no_value=True)
-    config.read(config_filename)
+    # construct calendar sharing manager, using config file
+    gccnmtl_calendars = GCalSharing(config_filename)
 
-    calendars = []
-    unis = []
-    try: 
-        calendars = config.options(CALENDAR_ID_SECTION)
-        users = config.options(USER_ID_SECTION)
-    except:
-        print ("Config file is misconfiged. See the README.md for more help")
+    # authenticate to google - will prompt browswer based oauth
+    gccnmtl_calendars.authenticate()
 
-    # oauth dance w/ google. Credentials are stored locally after first auth. 
-    # this method will open a brower for auth
-    credentials = get_credentials()
-    http = credentials.authorize(httplib2.Http())
-    service = discovery.build('calendar', 'v3', http=http)
-
-    # finally, do something - list, add or remove
-    rc = func(service, calendars, users)
-    return rc
+    # finally, call the class method corresponding to the action specified on the command line
+    # this was an unbound function, so bind it to our instance
+    action(gccnmtl_calendars)
 
 if __name__ == '__main__':
     sys.exit(main())

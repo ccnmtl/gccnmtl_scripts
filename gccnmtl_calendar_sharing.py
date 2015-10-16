@@ -1,13 +1,21 @@
 #!ve/bin/python
 """
-From https://developers.google.com/google-apps/calendar/quickstart/python
+A small script to manage gccnmtl calendars
 
-Make sure to follow the instructions, and download client_secret.json
+./gccnmtl_calendar_sharing.py [-a --add|-r --remove|-l list]][-c|--config <path to .ini file of urls and dest names>] [-h|--help]
+
+Jonah Bossewitch, CCNMTL
+https://github.com/ccnmtl/gccnmtl_scripts/README.md
+
 """
+
 
 from __future__ import print_function
 import httplib2
 import os
+import sys
+import getopt
+import ConfigParser
 
 from apiclient import discovery
 import oauth2client
@@ -16,16 +24,16 @@ from oauth2client import tools
 from googleapiclient.errors import HttpError
 import datetime
 
-try:
-    import argparse
-    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-except ImportError:
-    flags = None
-
 SCOPES = 'https://www.googleapis.com/auth/calendar' # read/write acces to calendars
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'gCCNMTL Calendar Sharing'
 
+CALENDAR_ID_SECTION='calendars'
+USER_ID_SECTION='emails'
+
+class Usage(Exception):
+    def __init__(self, msg):
+        self.msg = msg
 
 def get_credentials():
     """Gets valid user credentials from storage.
@@ -48,14 +56,12 @@ def get_credentials():
     if not credentials or credentials.invalid:
         flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
         flow.user_agent = APPLICATION_NAME
-        if flags:
-            credentials = tools.run_flow(flow, store, flags)
-        else: # Needed only for compatability with Python 2.6
-            credentials = tools.run(flow, store)
+        credentials = tools.run(flow, store)
         print('Storing credentials to ' + credential_path)
     return credentials
 
-def list_users(service, calendar_id):
+
+def list_calendar(service, calendar_id):
     """List the current sharing rules on calendar_id"""
     
     try:
@@ -69,7 +75,13 @@ def list_users(service, calendar_id):
 
     for rule in acl['items']:
         print("%s: %s" % (rule['id'], rule['role']))
+
+def list_all(service, calendars, users):
+    """call list_calendar for each calendar in calendars"""
     
+    for c in calendars:
+        list_calendar(service, c)
+        
 def add_user(service, calendar_id, user_email):
     """add this user to the calendar as a reader"""
 
@@ -95,6 +107,13 @@ def add_user(service, calendar_id, user_email):
 
     print("%s was added to %s (rule: %s)" % (user_email, calendar_id, created_rule['id']))
 
+def add_users(service, calendars, users):
+    """call add_user for each users for each calendar in calendars"""
+    
+    for c in calendars:
+        for u in users:
+                 add_user(service, c, u)
+
 def remove_user(service, calendar_id, user_email):
     """remove this user from calendar_id"""
     
@@ -112,7 +131,14 @@ def remove_user(service, calendar_id, user_email):
           raise
     print("%s was removed from %s" % (user_email, calendar_id))
     
-def main():
+def remove_users(service, calendars, users):
+    """call add_user for each users for each calendar in calendars"""
+    
+    for c in calendars:
+        for u in users:
+                 remove_user(service, c, u)
+
+def main(argv=None):
     """
     Decides what to do based on command line arguements, and dispatches to appropriate function
 
@@ -121,21 +147,74 @@ def main():
     - verb: add|remove
     - user: the user you want to share/remove from the calendar 
     """
-    LEW_603 = 'gccnmtl.columbia.edu_2d31383235333138342d393935@resource.calendar.google.com'
-    USER = 'jb2410'
-    USER_EMAIL = "%s@columbia.edu" % USER
+
+    if argv == None:
+        argv = sys.argv
+    try:
+        try:
+            opts, args = getopt.getopt(argv[1:], "arlc:h", ["add", "remove", "list", "config=", "help"])
+        except getopt.error, msg:
+            raise Usage(msg)
+    except Usage, err:
+        print(err.msg, file=sys.stderr)
+        print("for help use --help", file=sys.stderr)
+        return 2
+
+    if not opts:
+        print (__doc__)
+        return 2
     
+    #import pdb; pdb.set_trace()
+
+    func = None
+    arg = None
+    for o, a in opts:
+        if o == "-l" or o == "--list":
+            func = list_all
+        elif o == "-a" or o == "--add":
+            func = add_users
+        elif o == "-r" or o == "--remove":
+            func = remove_users
+        elif o == "-c" or o == "--config":
+            config_filename = a
+        elif o == "-h" or o == "--help":
+            print (__doc__)
+            return 2
+        else:            
+            print (__doc__)
+            return 2
+
+    #make sure an action was specified
+    if not func or not config_filename:
+        print (__doc__)
+        return 2
+        
+    #LEW_603 = 'gccnmtl.columbia.edu_2d31383235333138342d393935@resource.calendar.google.com'
+    #USER = 'jb2410'
+    #USER_EMAIL = "%s@columbia.edu" % USER
+
+    # try opening the config file
+    if not(os.access(config_filename, os.R_OK | os.F_OK)):
+        print ("Could not open %s\n" % config_filename)
+        sys.exit(2)
+    
+    config = ConfigParser.SafeConfigParser(allow_no_value=True)
+    config.read(config_filename)
+
+    calendars = []
+    unis = []
+    try: 
+        calendars = config.options(CALENDAR_ID_SECTION)
+        users = config.options(USER_ID_SECTION)
+    except:
+        print ("Config file is misconfiged. See the README.md for more help")
+        
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('calendar', 'v3', http=http)
  
-    list_users(service, LEW_603)
-
-    #add_user(service, LEW_603, USER_EMAIL)
-    remove_user(service, LEW_603, USER_EMAIL)
-
-    list_users(service, LEW_603)
-
+    rc = func(service, calendars, users)
+    return rc
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
